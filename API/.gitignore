@@ -1,0 +1,22 @@
+# Ignorar entorno virtual
+.env/
+
+# Archivos de configuración sensibles
+*.env
+
+# Archivos compilados de Python
+__pycache__/
+*.py[cod]
+
+# Archivos de logs
+*.log
+
+# Archivos de base de datos SQLite (si aplicable)
+*.sqlite3
+
+# Configuración de VSCode (si usas VSCode)
+.vscode/
+
+# Archivos de dependencia (si usas pipenv o poetry)
+Pipfile.lock
+poetry.lock

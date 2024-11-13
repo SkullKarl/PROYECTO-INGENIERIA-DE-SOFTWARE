@@ -1,5 +1,3 @@
-# lista de librerias necesarias para que el proyecto funcione
-
 Flask
 pymongo
-dnspython
+Werkzeug

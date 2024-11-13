@@ -1,4 +1,4 @@
-from API import create_app
+from __init__ import create_app
 from config import DevelopmentConfig
 
 app = create_app(DevelopmentConfig)
