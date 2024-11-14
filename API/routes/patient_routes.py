@@ -1,7 +1,8 @@
 # API/routes/patient_routes.py
 
 from flask import Blueprint, request, jsonify
-from models.user import User
+from API.models.user import User
+from API.config import get_db
 
 # Creación del Blueprint para las rutas de pacientes
 patient_bp = Blueprint('patient', __name__)
@@ -36,3 +37,38 @@ def login():
 def reset():
     response = User.reset()
     return jsonify(response)
+
+# Método para buscar usuarios que sean especialistas
+@staticmethod
+def get_specialist_users():
+    db = get_db()
+    users_collection = db["users"]
+    users = users_collection.find({"rol": {"$regex": "especialista", "$options": "i"}})
+    user_list = [
+        {
+            "_id": str(user["_id"]),
+            "nombre": user["nombre"],
+            "email": user["email"],
+            "rol": user["rol"]
+        } for user in users
+    ]
+    return jsonify({"especialistas": user_list}), 200
+
+# Método para buscar usuarios por rol
+@staticmethod
+def get_users_by_role():
+    role = request.args.get('rol')
+    if not role:
+        return jsonify({"error": "Se requiere especificar un rol"}), 400
+    db = get_db()
+    users_collection = db["users"]
+    users = users_collection.find({"rol": role})
+    user_list = [
+        {
+            "_id": str(user["_id"]),
+            "nombre": user["nombre"],
+            "email": user["email"],
+            "rol": user["rol"]
+        } for user in users
+    ]
+    return jsonify({"usuarios": user_list}), 200

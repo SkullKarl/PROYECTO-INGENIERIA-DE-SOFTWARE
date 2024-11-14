@@ -1,9 +1,9 @@
 # En API/__init__.py
 
 from flask import Flask
-from routes.patient_routes import patient_bp
-from routes.specialist_routes import specialist_bp
-from routes.admin_routes import admin_bp
+from API.routes.patient_routes import patient_bp
+from API.routes.specialist_routes import specialist_bp
+from API.routes.admin_routes import admin_bp
 
 def create_app(config_object=None):
     app = Flask(__name__)

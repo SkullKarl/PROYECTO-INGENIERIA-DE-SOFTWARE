@@ -2,8 +2,7 @@
 
 from pymongo import MongoClient, errors
 from werkzeug.security import generate_password_hash, check_password_hash
-from flask import current_app
-from config import get_db
+from API.config import get_db
 
 class User:
     def __init__(self, rut, nombre, apellidos, email, sexo, fecha_nacimiento, telefono_movil, tipo='patient', password=None, _id=None):

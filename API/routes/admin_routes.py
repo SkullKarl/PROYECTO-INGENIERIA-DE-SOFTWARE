@@ -1,7 +1,7 @@
 # API/routes/admin_routes.py
 
 from flask import Blueprint, request, jsonify
-from models.user import User
+from API.models.user import User
 
 # Creación del Blueprint para las rutas de administradores
 admin_bp = Blueprint('admin', __name__)
