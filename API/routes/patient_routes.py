@@ -1,8 +1,8 @@
 # API/routes/patient_routes.py
 
 from flask import Blueprint, request, jsonify
-from API.models.user import User
-from API.config import get_db
+from models.user import User
+from config import get_db
 
 # Creación del Blueprint para las rutas de pacientes
 patient_bp = Blueprint('patient', __name__)

@@ -2,7 +2,7 @@
 
 from pymongo import MongoClient, errors
 from werkzeug.security import generate_password_hash, check_password_hash
-from API.config import get_db
+from config import get_db
 
 class User:
     def __init__(self, rut, nombre, apellidos, email, sexo, fecha_nacimiento, telefono_movil, tipo='patient', password=None, _id=None):
@@ -40,8 +40,12 @@ class User:
         if db["users"].find_one({"rut": rut}):
             return {"error": "El usuario con este RUT ya existe"}, 400
 
-        # Crear el hash de la contraseña si se proporciona
-        password_hash = generate_password_hash(password) if password else None
+        # Si el tipo es "patient" y no se proporciona una contraseña, se asigna "1"
+        if tipo == 'patient' and not password:
+            password = "1"
+
+        # Crear el hash de la contraseña
+        password_hash = generate_password_hash(password)
         new_user = {
             "rut": rut,
             "nombre": nombre,
@@ -54,6 +58,14 @@ class User:
             "password": password_hash
         }
         result = db["users"].insert_one(new_user)
+
+        # Si el usuario es un especialista, crear un documento en `doctors`
+        if tipo == 'specialist':
+            db["doctors"].insert_one({
+                "rut": rut,
+                "specialty": "general",  # Especialidad por defecto
+                "available_blocks": []   # Inicializar lista vacía de bloques
+            })
 
         # Retornar la respuesta con los datos del usuario registrado
         return {

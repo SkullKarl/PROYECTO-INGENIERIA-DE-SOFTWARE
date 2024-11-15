@@ -6,6 +6,8 @@ Este proyecto utiliza un entorno virtual para gestionar las dependencias. A cont
 
 Sigue los siguientes pasos en el terminal para crear y activar el entorno virtual, instalar las dependencias y ejecutar la aplicación.
 
+----------------------RECUERDEN USAR LA CARPETA API COMO RAIZ Y NO LA GENERAL----------------------
+
 ### 1. Crear el Entorno Virtual
 
 Ejecuta el siguiente comando en el terminal desde la raíz del proyecto para crear un entorno virtual llamado `.env`:
@@ -20,14 +22,12 @@ Una vez creado el entorno, actívalo con el siguiente comando:
 En Windows:
 
 ```bash
-Copiar código
 .env\Scripts\activate
 ```
 
 En macOS/Linux:
 
 ```bash
-Copiar código
 source .env/bin/activate
 ```
 
@@ -35,7 +35,6 @@ source .env/bin/activate
 Con el entorno virtual activo, instala las dependencias especificadas en requirements.txt ejecutando:
 
 ```bash
-Copiar código
 pip install -r requirements.txt
 ```
 
@@ -43,7 +42,6 @@ pip install -r requirements.txt
 Para iniciar la aplicación, simplemente ejecuta el siguiente comando:
 
 ```bash
-Copiar código
 python app.py
 ```
 
