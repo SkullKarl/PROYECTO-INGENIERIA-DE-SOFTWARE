@@ -58,23 +58,27 @@ def get_by_name():
         return jsonify(usuario), 200
     return jsonify({"error": "Usuario no encontrado"}), 404
 
-@patient_bp.route("/get_by_role/<rol>", methods=['GET'])
-def get_by_role():
-    role = request.args.get('rol')
-    if not role:
-        return jsonify({"error": "Se requiere especificar un rol"}), 400
+@patient_bp.route("/get_by_specialty", methods=['GET'])
+def get_by_specialty():
+    data = request.get_json()
+    specialty = data.get("specialty")
+    if not specialty:
+        return jsonify({"Error": "Se requiere especificar una especialidad"}), 400
     db = get_db()
     users_collection = db["users"]
-    users = users_collection.find({"rol": role})
-    user_list = [
+    users = users_collection.find({"specialty": specialty})
+    specialty_user_list = [
         {
-            "_id": str(user["_id"]),
+            "rut": user["rut"],
             "nombre": user["nombre"],
+            "apellidos": user["apellidos"],
             "email": user["email"],
-            "rol": user["rol"]
+            "sexo": user["sexo"],
+            "fecha nacimiento": user["fecha_nacimiento"],
+            "telefono movil": user["telefono_movil"]
         } for user in users
     ]
-    return jsonify({"usuarios": user_list}), 200
+    return jsonify({"Especialistas": specialty_user_list}), 200
 
 @patient_bp.route("/get_specialists_users", methods=["GET"])
 def get_specialists_users():
@@ -92,4 +96,4 @@ def get_specialists_users():
             "telefono movil": user["telefono_movil"]
         } for user in specialists_users
     ]
-    return jsonify({"especialistas": specialists_user_list}), 200
+    return jsonify({"Especialistas": specialists_user_list}), 200
