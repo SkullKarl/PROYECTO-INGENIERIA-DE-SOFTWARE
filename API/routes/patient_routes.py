@@ -97,3 +97,7 @@ def get_specialists_users():
         } for user in specialists_users
     ]
     return jsonify({"Especialistas": specialists_user_list}), 200
+
+@patient_bp.route("/get_medical_center_info", methods=["GET"])
+def get_medical_center_info():
+    return jsonify("Informacion del centro medico: hola"), 200
