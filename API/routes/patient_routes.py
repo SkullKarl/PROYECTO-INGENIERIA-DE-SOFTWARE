@@ -38,25 +38,17 @@ def reset():
     response = User.reset()
     return jsonify(response)
 
-# Método para buscar usuarios que sean especialistas
-@staticmethod
-def get_specialist_users():
+@patient_bp.route('/get_by_name', methods=['GET'])
+def get_by_name(nombre):
     db = get_db()
     users_collection = db["users"]
-    users = users_collection.find({"rol": {"$regex": "especialista", "$options": "i"}})
-    user_list = [
-        {
-            "_id": str(user["_id"]),
-            "nombre": user["nombre"],
-            "email": user["email"],
-            "rol": user["rol"]
-        } for user in users
-    ]
-    return jsonify({"especialistas": user_list}), 200
+    usuario = users_collection.find_one({'nombre': nombre})
+    if usuario:
+        return jsonify(usuario), 200
+    return jsonify({"error": "Usuario no encontrado"}), 404
 
-# Método para buscar usuarios por rol
-@staticmethod
-def get_users_by_role():
+@patient_bp.route("/get_by_role/<rol>", methods=['GET'])
+def get_by_role():
     role = request.args.get('rol')
     if not role:
         return jsonify({"error": "Se requiere especificar un rol"}), 400
@@ -72,3 +64,21 @@ def get_users_by_role():
         } for user in users
     ]
     return jsonify({"usuarios": user_list}), 200
+
+@patient_bp.route("/get_specialists_users", methods=['GET'])
+def get_specialists_users():
+    db = get_db()
+    users_collection = db["users"]
+    specialists_users = users_collection.find({"tipo": {"$regex": "specialist", "$options": "i"}})
+    specialists_user_list = [
+        {
+            "rut": user["rut"],
+            "nombre": user["nombre"],
+            "apellidos": user["apellidos"],
+            "email": user["email"],
+            "sexo": user["sexo"],
+            "fecha nacimiento": user["fecha_nacimiento"],
+            "telefono movil": user["telefono_movil"]
+        } for user in specialists_users
+    ]
+    return jsonify({"especialistas": specialists_user_list}), 200
