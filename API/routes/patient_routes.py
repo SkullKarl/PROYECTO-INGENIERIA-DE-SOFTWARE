@@ -38,11 +38,22 @@ def reset():
     response = User.reset()
     return jsonify(response)
 
-@patient_bp.route('/get_by_name', methods=['GET'])
-def get_by_name(nombre):
+@patient_bp.route("/get_by_name", methods=["GET"])
+def get_by_name():
+    data = request.get_json()
+    nombre = data.get("nombre")
     db = get_db()
     users_collection = db["users"]
-    usuario = users_collection.find_one({'nombre': nombre})
+    user = users_collection.find_one({"nombre": nombre})
+    usuario = {
+        "rut": user["rut"],
+        "nombre": user["nombre"],
+        "apellidos": user["apellidos"],
+        "email": user["email"],
+        "sexo": user["sexo"],
+        "fecha nacimiento": user["fecha_nacimiento"],
+        "telefono movil": user["telefono_movil"]
+    }
     if usuario:
         return jsonify(usuario), 200
     return jsonify({"error": "Usuario no encontrado"}), 404
@@ -65,7 +76,7 @@ def get_by_role():
     ]
     return jsonify({"usuarios": user_list}), 200
 
-@patient_bp.route("/get_specialists_users", methods=['GET'])
+@patient_bp.route("/get_specialists_users", methods=["GET"])
 def get_specialists_users():
     db = get_db()
     users_collection = db["users"]
