@@ -59,6 +59,80 @@ def get_all_appointments():
     
     return jsonify(appointments_data), 200
 
+# Cancela una cita actualizando su estado
+@appointment_bp.route('/cancel', methods=['POST'])
+def cancel_appointment():
+
+    data = request.get_json()
+    appointment_id = data.get('appointment_id')
+
+    if not appointment_id:
+        return jsonify({"error": "El campo 'appointment_id' es requerido"}), 400
+
+    db = get_db()
+    appointments_collection = db["appointment"]
+
+    try:
+        # Convertir el ID a ObjectId
+        appointment_id = ObjectId(appointment_id)
+
+        # Actualizar el estado de la cita
+        result = appointments_collection.update_one(
+            {"_id": appointment_id},
+            {"$set": {"estado": "cancelado"}}
+        )
+
+        if result.matched_count == 0:
+            return jsonify({"error": "Cita no encontrada"}), 404
+
+        return jsonify({"message": "Cita cancelada exitosamente"}), 200
+
+    except (TypeError, ValueError):
+        return jsonify({"error": "ID inválido"}), 400
+
+
+# Modifica una cita
+@appointment_bp.route('/modify', methods=['PUT'])
+def modify_appointment():
+
+    data = request.get_json()
+    appointment_id = data.get('appointment_id')
+    nueva_fecha = data.get('fecha')
+    nueva_hora = data.get('hora')
+
+    if not appointment_id or not nueva_fecha or not nueva_hora:
+        return jsonify({"error": "Se requieren 'appointment_id', 'fecha' y 'hora'"}), 400
+
+    db = get_db()
+    appointments_collection = db["appointment"]
+
+    try:
+        # Convertir el ID a ObjectId
+        appointment_id = ObjectId(appointment_id)
+
+        # Verificar si ya existe otra cita en el nuevo horario
+        conflicto = appointments_collection.find_one({
+            "fecha": nueva_fecha,
+            "hora": nueva_hora
+        })
+        if conflicto and str(conflicto["_id"]) != appointment_id:
+            return jsonify({"error": "Ya existe una cita en la fecha y hora especificadas"}), 409
+
+        # Actualizar la cita
+        result = appointments_collection.update_one(
+            {"_id": appointment_id},
+            {"$set": {"fecha": nueva_fecha, "hora": nueva_hora}}
+        )
+
+        if result.matched_count == 0:
+            return jsonify({"error": "Cita no encontrada"}), 404
+
+        return jsonify({"message": "Cita modificada exitosamente"}), 200
+
+    except (TypeError, ValueError):
+        return jsonify({"error": "ID inválido"}), 400
+    
+
 # Obtener una cita por ID
 @appointment_bp.route('/Get_by_id', methods=['POST'])
 def get_appointment_by_id():
