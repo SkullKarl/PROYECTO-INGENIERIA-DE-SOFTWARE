@@ -96,4 +96,5 @@ def get_appointment_by_id():
     appointments_data = convert_objectid(appointment)
     
     return jsonify(appointments_data), 200
+
     

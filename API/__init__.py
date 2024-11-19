@@ -7,8 +7,12 @@ from routes.admin_routes import admin_bp
 from routes.block_routes import block_bp
 from routes.appointment_routes import appointment_bp
 
+from flask_cors import CORS
+
 def create_app(config_object=None):
     app = Flask(__name__)
+    CORS(app)  # Habilita CORS para toda la API
+    
     if config_object:
         app.config.from_object(config_object)
     

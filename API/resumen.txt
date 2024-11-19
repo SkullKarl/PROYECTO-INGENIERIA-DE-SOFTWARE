@@ -1,0 +1,818 @@
+
+--- Contenido de la carpeta: '.' ---
+
+Archivo ignorado: '.gitignore'
+
+Contenido completo del archivo Python 'app.py':
+from __init__ import create_app
+from config import DevelopmentConfig
+
+app = create_app(DevelopmentConfig)
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=8160)
+
+Contenido completo del archivo Python 'config.py':
+from pymongo import MongoClient
+
+class Config:
+    SECRET_KEY = 'akmak2470'
+    MONGODB_USERNAME = 'akmak_1'
+    MONGODB_PASSWORD = 'xxWarWtqO5vVRgso'
+    MONGODB_CLUSTER = 'cluster0.glb67p5.mongodb.net'
+    MONGODB_DBNAME = 'DataBase'
+
+class DevelopmentConfig(Config):
+    DEBUG = True
+    ENV = 'development'
+
+class ProductionConfig(Config):
+    DEBUG = False
+    ENV = 'production'
+
+def get_db():
+    config = Config()
+    uri = f"mongodb+srv://{config.MONGODB_USERNAME}:{config.MONGODB_PASSWORD}@{config.MONGODB_CLUSTER}/{config.MONGODB_DBNAME}?retryWrites=true&w=majority"
+    client = MongoClient(uri)
+    db = client[config.MONGODB_DBNAME]
+    return db
+
+Archivo ignorado: 'README.md'
+
+Contenido del archivo 'requirements.txt':
+Flask
+pymongo
+Werkzeug
+
+
+Contenido del archivo 'resumen.txt':
+
+
+Contenido completo del archivo Python '__init__.py':
+# En API/__init__.py
+
+from flask import Flask
+from routes.patient_routes import patient_bp
+from routes.specialist_routes import specialist_bp
+from routes.admin_routes import admin_bp
+from routes.block_routes import block_bp
+from routes.appointment_routes import appointment_bp
+
+def create_app(config_object=None):
+    app = Flask(__name__)
+    if config_object:
+        app.config.from_object(config_object)
+    
+    # Registrar los Blueprints con prefijos específicos
+    app.register_blueprint(patient_bp, url_prefix='/patient')
+    app.register_blueprint(specialist_bp, url_prefix='/specialist')
+    app.register_blueprint(admin_bp, url_prefix='/admin')
+    app.register_blueprint(block_bp, url_prefix='/blocks')
+    app.register_blueprint(appointment_bp, url_prefix='/appointment')
+
+    return app
+
+
+--- Contenido de la carpeta: 'models' ---
+
+Contenido completo del archivo Python 'appointment.py':
+# API/models/appointment.py
+
+from pymongo.errors import DuplicateKeyError
+from config import get_db
+
+
+class Appointment:
+    @classmethod
+    def schedule(cls, paciente_rut, especialista_rut, fecha, hora):
+
+        #Agenda una cita y vereficara con la base de datos de MongoDB si hay disponibilidad
+        db = get_db()
+        appointments_collection = db["appointment"]
+
+        # Verificar si ya existe una cita en esa fecha y hora para el paciente
+        existing_patient_appointment = appointments_collection.find_one({
+            "paciente_rut": paciente_rut,
+            "fecha": fecha,
+            "hora": hora
+        })
+        if existing_patient_appointment:
+            return {"error": "El paciente ya tiene una cita agendada para esta fecha y hora."}, 409
+
+        # Verificar si ya existe una cita para el especialista en la misma fecha y hora
+        existing_specialist_appointment = appointments_collection.find_one({
+            "specialist_rut": especialista_rut,
+            "fecha": fecha,
+            "hora": hora
+        })
+        if existing_specialist_appointment:
+            return {"error": "El especialista ya tiene una cita agendada para este horario."}, 409
+
+        # Crear nueva cita
+        appointment = {
+            "paciente_rut": paciente_rut,
+            "specialist_rut": especialista_rut,
+            "fecha": fecha,
+            "hora": hora,
+            "estado": "agendado"  # Estado inicial de la cita
+        }
+
+        try:
+            appointments_collection.insert_one(appointment)
+            return {"mensage": "Cita agendada exitosamente", "appointment": appointment}, 201
+        except DuplicateKeyError:
+            return {"error": "Error al agendar la cita, conflicto en el identificador"}, 500
+
+Contenido completo del archivo Python 'block.py':
+# API/models/block.py
+
+from pymongo import errors
+from config import get_db
+
+class Block:
+    @classmethod
+    def reset(cls):
+        """
+        Elimina todos los documentos en la colección 'blocks'.
+        """
+        db = get_db()
+        db["blocks"].delete_many({})
+        return {"message": "La colección de bloques ha sido reseteada"}, 200
+
+    @classmethod
+    def generate(cls):
+        """
+        Genera todos los bloques posibles (de lunes a sábado, de 8 AM a 5 PM).
+        """
+        db = get_db()
+
+        # Rango de días (lunes a sábado) y horas (de 8 AM a 5 PM)
+        days = range(1, 7)  # 1: lunes, 6: sábado
+        hours = range(8, 21)  # 8 AM a 5 PM (17:00 inclusive)
+
+        # Lista para almacenar los bloques a insertar
+        blocks = []
+        
+        for day in days:
+            for hour in hours:
+                block = {
+                    "day": day,
+                    "hour": hour
+                }
+                blocks.append(block)
+
+        # Insertar todos los bloques generados en la colección
+        db["blocks"].insert_many(blocks)
+        return {"message": "Todos los bloques posibles han sido generados"}, 201
+
+
+Contenido completo del archivo Python 'specialist.py':
+# API/models/specialist.py
+
+from pymongo import errors
+from config import get_db
+
+class Specialist:
+    def __init__(self, rut):
+        self.rut = rut
+
+    def add_block(self, day, hour):
+        """
+        Asocia un bloque de tiempo al especialista basado en la combinación única de day y hour.
+        """
+        db = get_db()
+
+        # Buscar el bloque en la colección `blocks` mediante `day` y `hour`
+        block = db["blocks"].find_one({"day": day, "hour": hour})
+        if not block:
+            return {"error": "El bloque especificado no existe"}, 404
+
+        # Crear una representación única del bloque con day y hour
+        block_identifier = f"{day}-{hour}"
+
+        # Verificar si el especialista ya tiene un documento en `doctors` usando su `rut`
+        doctor_record = db["doctors"].find_one({"rut": self.rut})
+        
+        if doctor_record:
+            # Si el especialista ya tiene bloques, agregamos el nuevo bloque si no está duplicado
+            if block_identifier in doctor_record["available_blocks"]:
+                return {"error": "El bloque ya está asociado a este especialista"}, 400
+            db["doctors"].update_one(
+                {"rut": self.rut},
+                {"$push": {"available_blocks": block_identifier}}
+            )
+        else:
+            # Crear un nuevo registro para el especialista con el bloque
+            db["doctors"].insert_one({
+                "rut": self.rut,
+                "available_blocks": [block_identifier]
+            })
+
+        return {"message": "Bloque agregado al horario del especialista"}, 201
+    
+    def set_specialty(self, specialty):
+        """
+        Cambia la especialidad del doctor dado su rut.
+        """
+        db = get_db()
+        
+        # Actualizar la especialidad en el documento del doctor
+        result = db["doctors"].update_one(
+            {"rut": self.rut},
+            {"$set": {"specialty": specialty}}
+        )
+        
+        if result.matched_count == 0:
+            return {"error": "Doctor no encontrado"}, 404
+
+        return {"message": f"Especialidad actualizada a {specialty}"}, 200
+
+Contenido completo del archivo Python 'user.py':
+# API/models/user.py
+
+from pymongo import MongoClient, errors
+from werkzeug.security import generate_password_hash, check_password_hash
+from config import get_db
+
+class User:
+    def __init__(self, rut, nombre, apellidos, email, sexo, fecha_nacimiento, telefono_movil, tipo='patient', password=None, _id=None):
+        self._id = _id
+        self.rut = rut
+        self.nombre = nombre
+        self.apellidos = apellidos
+        self.email = email
+        self.sexo = sexo
+        self.fecha_nacimiento = fecha_nacimiento
+        self.telefono_movil = telefono_movil
+        self.tipo = tipo
+        self.password_hash = generate_password_hash(password) if password else None
+
+    @classmethod
+    def login(cls, rut, password, expected_type):
+        db = get_db()
+        user_data = db["users"].find_one({"rut": rut})
+
+        # Verificar si el usuario existe, la contraseña coincide y el tipo es el esperado
+        if (
+            user_data
+            and user_data.get("password")
+            and check_password_hash(user_data["password"], password)
+            and user_data.get("tipo") == expected_type
+        ):
+            return True
+        return False
+
+    @classmethod
+    def register(cls, rut, nombre, apellidos, email, sexo, fecha_nacimiento, telefono_movil, tipo='patient', password=None):
+        db = get_db()
+        
+        # Verificar si el usuario ya existe por RUT
+        if db["users"].find_one({"rut": rut}):
+            return {"error": "El usuario con este RUT ya existe"}, 400
+
+        # Si el tipo es "patient" y no se proporciona una contraseña, se asigna "1"
+        if tipo == 'patient' and not password:
+            password = "1"
+
+        # Crear el hash de la contraseña
+        password_hash = generate_password_hash(password)
+        new_user = {
+            "rut": rut,
+            "nombre": nombre,
+            "apellidos": apellidos,
+            "email": email,
+            "sexo": sexo,
+            "fecha_nacimiento": fecha_nacimiento,
+            "telefono_movil": telefono_movil,
+            "tipo": tipo,
+            "password": password_hash
+        }
+        result = db["users"].insert_one(new_user)
+
+        # Si el usuario es un especialista, crear un documento en `doctors`
+        if tipo == 'specialist':
+            db["doctors"].insert_one({
+                "rut": rut,
+                "specialty": "general",  # Especialidad por defecto
+                "available_blocks": []   # Inicializar lista vacía de bloques
+            })
+
+        # Retornar la respuesta con los datos del usuario registrado
+        return {
+            "message": "Registro exitoso",
+            "user": {
+                "rut": rut,
+                "nombre": nombre,
+                "apellidos": apellidos,
+                "email": email,
+                "sexo": sexo,
+                "fecha_nacimiento": fecha_nacimiento,
+                "telefono_movil": telefono_movil,
+                "tipo": tipo,
+                "_id": str(result.inserted_id)
+            }
+        }, 201
+
+    @classmethod
+    def reset(cls):
+        db = get_db()
+        
+        # Eliminar la colección si existe
+        if "users" in db.list_collection_names():
+            db["users"].drop()
+
+        # Definir el esquema de validación JSON Schema
+        user_schema = {
+            'validator': {
+                '$jsonSchema': {
+                    'bsonType': 'object',
+                    'required': ["rut", "nombre", "apellidos", "email", "sexo", "fecha_nacimiento", "telefono_movil", "tipo"],
+                    'properties': {
+                        'rut': {
+                            'bsonType': 'string',
+                            'description': "Debe ser una cadena de caracteres para el RUT del usuario."
+                        },
+                        'nombre': {
+                            'bsonType': 'string',
+                            'description': "Debe ser una cadena de caracteres para el nombre del usuario."
+                        },
+                        'apellidos': {
+                            'bsonType': 'string',
+                            'description': "Debe ser una cadena de caracteres para los apellidos del usuario."
+                        },
+                        'email': {
+                            'bsonType': 'string',
+                            'description': "Debe ser una cadena de caracteres para el correo electrónico del usuario."
+                        },
+                        'sexo': {
+                            'bsonType': 'string',
+                            'enum': ['M', 'F', 'Otro'],
+                            'description': "El sexo debe ser 'M', 'F' u 'Otro'."
+                        },
+                        'fecha_nacimiento': {
+                            'bsonType': 'string',
+                            'description': "Debe ser una cadena de caracteres para la fecha de nacimiento en formato ISO."
+                        },
+                        'telefono_movil': {
+                            'bsonType': 'string',
+                            'description': "Debe ser una cadena de caracteres para el número de teléfono móvil del usuario."
+                        },
+                        'tipo': {
+                            'bsonType': 'string',
+                            'enum': ['patient', 'specialist', 'admin'],
+                            'description': "El tipo de usuario debe ser 'patient', 'specialist' o 'admin'."
+                        },
+                        'password': {
+                            'bsonType': 'string',
+                            'description': "Debe ser una cadena de caracteres para la contraseña en hash del usuario."
+                        }
+                    }
+                }
+            }
+        }
+
+        # Crear la colección con el esquema de validación
+        try:
+            db.create_collection("users", **user_schema)
+        except errors.CollectionInvalid:
+            db.command({
+                'collMod': 'users',
+                'validator': user_schema['validator']
+            })
+
+        return {"message": "La colección de usuarios ha sido restablecida con el esquema especificado"}, 200
+
+    def set_password(self, password):
+        """
+        Establece o cambia la contraseña del usuario.
+        """
+        self.password_hash = generate_password_hash(password)
+        db = get_db()
+        db["users"].update_one({"rut": self.rut}, {"$set": {"password": self.password_hash}})
+
+    def save(self):
+        db = get_db()
+        user_data = {
+            "rut": self.rut,
+            "nombre": self.nombre,
+            "apellidos": self.apellidos,
+            "email": self.email,
+            "sexo": self.sexo,
+            "fecha_nacimiento": self.fecha_nacimiento,
+            "telefono_movil": self.telefono_movil,
+            "tipo": self.tipo,
+            "password": self.password_hash
+        }
+        if self._id:
+            db["users"].update_one({"_id": self._id}, {"$set": user_data})
+        else:
+            result = db["users"].insert_one(user_data)
+            self._id = result.inserted_id
+
+    def to_dict(self):
+        return {
+            "_id": str(self._id),
+            "rut": self.rut,
+            "nombre": self.nombre,
+            "apellidos": self.apellidos,
+            "email": self.email,
+            "sexo": self.sexo,
+            "fecha_nacimiento": self.fecha_nacimiento,
+            "telefono_movil": self.telefono_movil,
+            "tipo": self.tipo
+        }
+
+Contenido completo del archivo Python '__initi__.py':
+
+
+
+--- Contenido de la carpeta: 'models\__pycache__' ---
+
+Archivo ignorado: 'appointment.cpython-312.pyc'
+
+Archivo ignorado: 'block.cpython-312.pyc'
+
+Archivo ignorado: 'models.cpython-312.pyc'
+
+Archivo ignorado: 'specialist.cpython-312.pyc'
+
+Archivo ignorado: 'timetable.cpython-312.pyc'
+
+Archivo ignorado: 'user.cpython-312.pyc'
+
+
+--- Contenido de la carpeta: 'routes' ---
+
+Contenido completo del archivo Python 'admin_routes.py':
+# API/routes/admin_routes.py
+
+from flask import Blueprint, request, jsonify
+from models.user import User
+
+# Creación del Blueprint para las rutas de administradores
+admin_bp = Blueprint('admin', __name__)
+
+@admin_bp.route('/register', methods=['POST'])
+def register():
+    data = request.get_json()
+    response = User.register(
+        rut=data.get('rut'),
+        nombre=data.get('nombre'),
+        apellidos=data.get('apellidos'),
+        email=data.get('email'),
+        sexo=data.get('sexo'),
+        fecha_nacimiento=data.get('fecha_nacimiento'),
+        telefono_movil=data.get('telefono_movil'),
+        tipo='admin',
+        password=data.get('password')
+    )
+    return jsonify(response)
+
+@admin_bp.route('/login', methods=['POST'])
+def login():
+    data = request.get_json()
+    rut = data.get('rut')
+    password = data.get('password')
+
+    # Llamada al método de login del modelo User con el tipo de usuario 'admin'
+    login_successful = User.login(rut, password, expected_type='admin')
+    return jsonify({"login_successful": login_successful})
+
+@admin_bp.route('/reset', methods=['POST'])
+def reset():
+    response = User.reset()
+    return jsonify(response)
+
+Contenido completo del archivo Python 'appointment_routes.py':
+# API/routes/appointment_routes.py
+
+from bson import ObjectId
+from flask import Blueprint, request, jsonify
+from models.appointment import Appointment
+from config import get_db
+
+appointment_bp = Blueprint('appointment', __name__)
+
+@appointment_bp.route('/schedule', methods=['POST'])
+def schedule_appointment():
+    data = request.get_json()
+
+    paciente_rut = data.get('paciente_rut')
+    especialista_rut = data.get('specialist_rut')
+    fecha = data.get('fecha')
+    hora = data.get('hora')
+
+    if not all([paciente_rut, especialista_rut, fecha, hora]):
+        return jsonify({"error": "Faltan datos obligatorios"}), 400
+
+    # Llamada a la función de reserva de cita
+    response = Appointment.schedule(paciente_rut, especialista_rut, fecha, hora)
+
+    # Si response contiene un ObjectId, conviértelo a str antes de enviarlo
+    def convert_objectid(obj):
+        if isinstance(obj, dict):
+            return {key: convert_objectid(value) for key, value in obj.items()}
+        elif isinstance(obj, list):
+            return [convert_objectid(item) for item in obj]
+        elif isinstance(obj, ObjectId):
+            return str(obj)
+        return obj
+
+    # Convierte todos los ObjectId a cadenas
+    response_data = convert_objectid(response[0])
+
+    return jsonify(response_data), response[1]
+
+# Obtener todas las citas
+@appointment_bp.route('/List', methods=['GET'])
+def get_all_appointments():
+    db = get_db()
+    appointments_collection = db["appointment"]
+    
+    appointments = list(appointments_collection.find())
+    
+    # Convertir todos los ObjectId a cadenas
+    def convert_objectid(obj):
+        if isinstance(obj, dict):
+            return {key: convert_objectid(value) for key, value in obj.items()}
+        elif isinstance(obj, list):
+            return [convert_objectid(item) for item in obj]
+        elif isinstance(obj, ObjectId):
+            return str(obj)
+        return obj
+
+    appointments_data = convert_objectid(appointments)
+    
+    return jsonify(appointments_data), 200
+
+# Obtener una cita por ID
+@appointment_bp.route('/Get_by_id', methods=['POST'])
+def get_appointment_by_id():
+
+    data = request.get_json()
+    appointment_id = data.get('appointment_id')
+
+    if not appointment_id:
+        return jsonify({"error": "El campo 'appointment_id' es requerido"}), 400
+
+    db = get_db()
+    appointments_collection = db["appointment"]
+
+    try:
+        appointment_id = ObjectId(appointment_id)
+        appointment = appointments_collection.find_one({"_id": appointment_id})
+        if not appointment:
+            return jsonify({"error": "Cita no encontrada"}), 404
+
+        # ... (resto del código para convertir ObjectId a str y retornar la respuesta)
+
+    except (TypeError, ValueError):
+        return jsonify({"error": "ID invalido"}), 400
+    
+    # Convertir todos los ObjectId a cadenas
+    def convert_objectid(obj):
+        if isinstance(obj, dict):
+            return {key: convert_objectid(value) for key, value in obj.items()}
+        elif isinstance(obj, list):
+            return [convert_objectid(item) for item in obj]
+        elif isinstance(obj, ObjectId):
+            return str(obj)
+        return obj
+
+    appointments_data = convert_objectid(appointment)
+    
+    return jsonify(appointments_data), 200
+    
+
+Contenido completo del archivo Python 'block_routes.py':
+# API/routes/block_routes.py
+
+from flask import Blueprint, jsonify
+from models.block import Block
+
+# Creación del Blueprint para las rutas de bloques
+block_bp = Blueprint('block', __name__)
+
+@block_bp.route('/reset', methods=['POST'])
+def reset_blocks():
+    """
+    Resetea la colección de bloques eliminando todos los documentos.
+    """
+    response = Block.reset()
+    return jsonify(response)
+
+@block_bp.route('/generate', methods=['POST'])
+def generate_blocks():
+    """
+    Genera todos los bloques posibles de lunes a sábado, de 8 AM a 5 PM.
+    """
+    response = Block.generate()
+    return jsonify(response)
+
+
+Contenido completo del archivo Python 'patient_routes.py':
+# API/routes/patient_routes.py
+
+from flask import Blueprint, request, jsonify
+from models.user import User
+from config import get_db
+
+# Creación del Blueprint para las rutas de pacientes
+patient_bp = Blueprint('patient', __name__)
+
+@patient_bp.route('/register', methods=['POST'])
+def register():
+    data = request.get_json()
+    response = User.register(
+        rut=data.get('rut'),
+        nombre=data.get('nombre'),
+        apellidos=data.get('apellidos'),
+        email=data.get('email'),
+        sexo=data.get('sexo'),
+        fecha_nacimiento=data.get('fecha_nacimiento'),
+        telefono_movil=data.get('telefono_movil'),
+        tipo='patient',
+        password=data.get('password')
+    )
+    return jsonify(response)
+
+@patient_bp.route('/login', methods=['POST'])
+def login():
+    data = request.get_json()
+    rut = data.get('rut')
+    password = data.get('password')
+
+    # Llamada al método de login del modelo User con el tipo de usuario 'patient'
+    login_successful = User.login(rut, password, expected_type='patient')
+    return jsonify({"login_successful": login_successful})
+
+@patient_bp.route('/reset', methods=['POST'])
+def reset():
+    response = User.reset()
+    return jsonify(response)
+
+@patient_bp.route("/get_by_name", methods=["GET"])
+def get_by_name():
+    data = request.get_json()
+    nombre = data.get("nombre")
+    db = get_db()
+    users_collection = db["users"]
+    user = users_collection.find_one({"nombre": nombre})
+    usuario = {
+        "rut": user["rut"],
+        "nombre": user["nombre"],
+        "apellidos": user["apellidos"],
+        "email": user["email"],
+        "sexo": user["sexo"],
+        "fecha nacimiento": user["fecha_nacimiento"],
+        "telefono movil": user["telefono_movil"]
+    }
+    if usuario:
+        return jsonify(usuario), 200
+    return jsonify({"error": "Usuario no encontrado"}), 404
+
+@patient_bp.route("/get_by_specialty", methods=['GET'])
+def get_by_specialty():
+    data = request.get_json()
+    specialty = data.get("specialty")
+    if not specialty:
+        return jsonify({"Error": "Se requiere especificar una especialidad"}), 400
+    db = get_db()
+    users_collection = db["users"]
+    users = users_collection.find({"specialty": specialty})
+    specialty_user_list = [
+        {
+            "rut": user["rut"],
+            "nombre": user["nombre"],
+            "apellidos": user["apellidos"],
+            "email": user["email"],
+            "sexo": user["sexo"],
+            "fecha nacimiento": user["fecha_nacimiento"],
+            "telefono movil": user["telefono_movil"]
+        } for user in users
+    ]
+    return jsonify({"Especialistas": specialty_user_list}), 200
+
+@patient_bp.route("/get_specialists_users", methods=["GET"])
+def get_specialists_users():
+    db = get_db()
+    users_collection = db["users"]
+    specialists_users = users_collection.find({"tipo": {"$regex": "specialist", "$options": "i"}})
+    specialists_user_list = [
+        {
+            "rut": user["rut"],
+            "nombre": user["nombre"],
+            "apellidos": user["apellidos"],
+            "email": user["email"],
+            "sexo": user["sexo"],
+            "fecha nacimiento": user["fecha_nacimiento"],
+            "telefono movil": user["telefono_movil"]
+        } for user in specialists_users
+    ]
+    return jsonify({"Especialistas": specialists_user_list}), 200
+
+@patient_bp.route("/get_medical_center_info", methods=["GET"])
+def get_medical_center_info():
+    return jsonify("Informacion del centro medico: hola"), 200
+
+Contenido completo del archivo Python 'specialist_routes.py':
+# API/routes/specialist_routes.py
+
+from flask import Blueprint, request, jsonify
+from models.user import User
+from models.specialist import Specialist
+
+# Creación del Blueprint para las rutas de especialistas
+specialist_bp = Blueprint('specialist', __name__)
+
+@specialist_bp.route('/register', methods=['POST'])
+def register():
+    data = request.get_json()
+    response = User.register(
+        rut=data.get('rut'),
+        nombre=data.get('nombre'),
+        apellidos=data.get('apellidos'),
+        email=data.get('email'),
+        sexo=data.get('sexo'),
+        fecha_nacimiento=data.get('fecha_nacimiento'),
+        telefono_movil=data.get('telefono_movil'),
+        tipo='specialist',
+        password=data.get('password')
+    )
+    return jsonify(response)
+
+@specialist_bp.route('/login', methods=['POST'])
+def login():
+    data = request.get_json()
+    rut = data.get('rut')
+    password = data.get('password')
+
+    # Llamada al método de login del modelo User con el tipo de usuario 'specialist'
+    login_successful = User.login(rut, password, expected_type='specialist')
+    return jsonify({"login_successful": login_successful})
+
+@specialist_bp.route('/reset', methods=['POST'])
+def reset():
+    response = User.reset()
+    return jsonify(response)
+
+@specialist_bp.route('/add_block', methods=['POST'])
+def add_block():
+    data = request.get_json()
+    rut = data.get('rut')
+    day = data.get('day')
+    hour = data.get('hour')
+
+    if not rut or day is None or hour is None:
+        return jsonify({"error": "Se requieren 'rut', 'day' y 'hour'"}), 400
+
+    specialist = Specialist(rut=rut)
+    response = specialist.add_block(day, hour)
+    return jsonify(response)
+
+@specialist_bp.route('/set_specialty', methods=['POST'])
+def set_specialty():
+    """
+    Ruta para actualizar la especialidad de un especialista dado su rut.
+    """
+    data = request.get_json()
+    rut = data.get('rut')
+    specialty = data.get('specialty')
+
+    if not rut or not specialty:
+        return jsonify({"error": "Se requieren 'rut' y 'specialty'"}), 400
+
+    specialist = Specialist(rut=rut)
+    response = specialist.set_specialty(specialty)
+    return jsonify(response)
+
+
+Contenido completo del archivo Python '__initi__.py':
+
+
+
+--- Contenido de la carpeta: 'routes\__pycache__' ---
+
+Archivo ignorado: 'admin_routes.cpython-312.pyc'
+
+Archivo ignorado: 'appointment_routes.cpython-312.pyc'
+
+Archivo ignorado: 'block_routes.cpython-312.pyc'
+
+Archivo ignorado: 'patient_routes.cpython-312.pyc'
+
+Archivo ignorado: 'specialist_routes.cpython-312.pyc'
+
+Archivo ignorado: 'timetable_routes.cpython-312.pyc'
+
+Archivo ignorado: 'user_routes.cpython-312.pyc'
+
+
+--- Contenido de la carpeta: '__pycache__' ---
+
+Archivo ignorado: 'config.cpython-312.pyc'
+
+Archivo ignorado: 'routes.cpython-312.pyc'
+
+Archivo ignorado: '__init__.cpython-312.pyc'
+
