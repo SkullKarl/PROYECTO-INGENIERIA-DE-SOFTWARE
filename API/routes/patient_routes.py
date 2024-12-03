@@ -25,13 +25,43 @@ def register():
 
 @patient_bp.route('/login', methods=['POST'])
 def login():
+    """
+    Inicia sesión como paciente y devuelve la información del usuario si el inicio de sesión es exitoso.
+    """
     data = request.get_json()
     rut = data.get('rut')
     password = data.get('password')
 
+    if not rut or not password:
+        return jsonify({"error": "Se requiere RUT y contraseña"}), 400
+
     # Llamada al método de login del modelo User con el tipo de usuario 'patient'
     login_successful = User.login(rut, password, expected_type='patient')
-    return jsonify({"login_successful": login_successful})
+
+    if not login_successful:
+        return jsonify({"login_successful": False, "error": "Credenciales incorrectas"}), 401
+
+    # Buscar la información completa del usuario en la base de datos
+    db = get_db()
+    user_data = db["users"].find_one({"rut": rut}, {
+        "rut": 1,
+        "nombre": 1,
+        "apellidos": 1,
+        "email": 1,
+        "sexo": 1,
+        "fecha_nacimiento": 1,
+        "telefono_movil": 1,
+        "_id": 0  # Excluir el campo _id
+    })
+
+    if not user_data:
+        return jsonify({"error": "Usuario no encontrado"}), 404
+
+    # Retornar login exitoso junto con la información del usuario
+    return jsonify({
+        "login_successful": True,
+        "user": user_data
+    }), 200
 
 @patient_bp.route('/reset', methods=['POST'])
 def reset():

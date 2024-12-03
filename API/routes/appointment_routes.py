@@ -171,4 +171,38 @@ def get_appointment_by_id():
     
     return jsonify(appointments_data), 200
 
-    
+    # Obtener todas las citas de un médico específico
+
+@appointment_bp.route('/ListByDoctor', methods=['POST'])
+def get_appointments_by_doctor():
+    """
+    Obtiene todas las citas asociadas a un médico específico identificado por su RUT.
+    """
+    data = request.get_json()
+    doctor_rut = data.get("rut")
+
+    if not doctor_rut:
+        return jsonify({"error": "Debe proporcionar el RUT del médico"}), 400
+
+    db = get_db()
+    appointments_collection = db["appointment"]
+
+    # Buscar citas asociadas al RUT del médico
+    appointments = list(appointments_collection.find({"specialist_rut": doctor_rut}))
+
+    # Convertir todos los ObjectId a cadenas
+    def convert_objectid(obj):
+        if isinstance(obj, dict):
+            return {key: convert_objectid(value) for key, value in obj.items()}
+        elif isinstance(obj, list):
+            return [convert_objectid(item) for item in obj]
+        elif isinstance(obj, ObjectId):
+            return str(obj)
+        return obj
+
+    appointments_data = convert_objectid(appointments)
+
+    if not appointments_data:
+        return jsonify({"message": "No se encontraron citas para el médico especificado"}), 404
+
+    return jsonify(appointments_data), 200
