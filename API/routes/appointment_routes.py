@@ -59,6 +59,36 @@ def get_all_appointments():
     
     return jsonify(appointments_data), 200
 
+# Elimina una cita de la base de datos
+@appointment_bp.route('/delete', methods=['POST'])
+def delete_appointment():
+    """
+    Elimina una cita de la base de datos.
+    """
+    data = request.get_json()
+    appointment_id = data.get('appointment_id')
+
+    if not appointment_id:
+        return jsonify({"error": "El campo 'appointment_id' es requerido"}), 400
+
+    db = get_db()
+    appointments_collection = db["appointment"]
+
+    try:
+        # Convertir el ID a ObjectId
+        appointment_id = ObjectId(appointment_id)
+
+        # Eliminar la cita de la base de datos
+        result = appointments_collection.delete_one({"_id": appointment_id})
+
+        if result.deleted_count == 0:
+            return jsonify({"error": "Cita no encontrada"}), 404
+
+        return jsonify({"message": "Cita eliminada exitosamente"}), 200
+
+    except (TypeError, ValueError):
+        return jsonify({"error": "ID inválido"}), 400
+
 # Cancela una cita actualizando su estado
 @appointment_bp.route('/cancel', methods=['POST'])
 def cancel_appointment():

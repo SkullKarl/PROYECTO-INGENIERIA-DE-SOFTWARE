@@ -3,6 +3,7 @@
 from flask import Blueprint, request, jsonify
 from models.user import User
 from config import get_db
+from bson import ObjectId
 
 # Creación del Blueprint para las rutas de pacientes
 patient_bp = Blueprint('patient', __name__)
@@ -160,3 +161,37 @@ def get_specialists_users():
 @patient_bp.route("/get_medical_center_info", methods=["GET"])
 def get_medical_center_info():
     return jsonify("Informacion del centro medico: hola"), 200
+
+@patient_bp.route("/get_appointments", methods=["POST"])
+def get_appointments_by_patient():
+    """
+    Obtiene todas las citas asociadas a un paciente dado su RUT.
+    """
+    data = request.get_json()
+    paciente_rut = data.get("rut")
+
+    if not paciente_rut:
+        return jsonify({"error": "Debe proporcionar el RUT del paciente"}), 400
+
+    db = get_db()
+    appointments_collection = db["appointment"]
+
+    # Buscar todas las citas asociadas al RUT del paciente
+    appointments = list(appointments_collection.find({"paciente_rut": paciente_rut}))
+
+    if not appointments:
+        return jsonify({"message": "No se encontraron citas para este paciente"}), 404
+
+    # Convertir ObjectId a cadenas y construir la respuesta
+    def convert_objectid(obj):
+        if isinstance(obj, dict):
+            return {key: convert_objectid(value) for key, value in obj.items()}
+        elif isinstance(obj, list):
+            return [convert_objectid(item) for item in obj]
+        elif isinstance(obj, ObjectId):
+            return str(obj)
+        return obj
+
+    appointments_data = convert_objectid(appointments)
+
+    return jsonify({"appointments": appointments_data}), 200
